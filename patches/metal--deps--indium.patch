@@ -1785,10 +1785,11 @@ index 8d00405..754b5b9 100644
  };
  
 diff --git a/src/indium/blit-command-encoder.cpp b/src/indium/blit-command-encoder.cpp
-index e58f0ba..a89b8e4 100644
+index e58f0ba..f63b0ac 100644
 --- a/src/indium/blit-command-encoder.cpp
 +++ b/src/indium/blit-command-encoder.cpp
-@@ -1,8 +1,10 @@
+@@ -1,8 +1,11 @@
++#include <indium/ab-switch.private.hpp>
 +#include <indium/black-trace.private.hpp>
  #include <indium/blit-command-encoder.private.hpp>
  #include <indium/command-buffer.private.hpp>
@@ -1799,7 +1800,7 @@ index e58f0ba..a89b8e4 100644
  
  Indium::BlitCommandEncoder::~BlitCommandEncoder() {};
  
-@@ -17,14 +19,29 @@ Indium::PrivateBlitCommandEncoder::PrivateBlitCommandEncoder(std::shared_ptr<Pri
+@@ -17,14 +20,29 @@ Indium::PrivateBlitCommandEncoder::PrivateBlitCommandEncoder(std::shared_ptr<Pri
  	_descriptor(descriptor)
  	{};
  
@@ -1822,8 +1823,8 @@ index e58f0ba..a89b8e4 100644
  
 -void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, size_t sourceOffset, std::shared_ptr<Buffer> destination, size_t destinationOffset, size_t size) {
 +void Indium::PrivateBlitCommandEncoder::copy(const std::shared_ptr<Buffer>& source, size_t sourceOffset, const std::shared_ptr<Buffer>& destination, size_t destinationOffset, size_t size) {
-+	_keepAlive.push_back(source);
-+	_keepAlive.push_back(destination);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(source);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(destination);
  	auto cmdbuf = _privateCommandBuffer.lock();
 -	auto privateSource = std::dynamic_pointer_cast<PrivateBuffer>(source);
 -	auto privateDest = std::dynamic_pointer_cast<PrivateBuffer>(destination);
@@ -1832,14 +1833,14 @@ index e58f0ba..a89b8e4 100644
  
  	VkBufferCopy info {};
  
-@@ -37,18 +54,30 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, siz
+@@ -37,18 +55,30 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, siz
  	DynamicVK::vkCmdCopyBuffer(cmdbuf->commandBuffer(), privateSource->buffer(), privateDest->buffer(), 1, &info);
  };
  
 -void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, size_t sourceOffset, size_t sourceBytesPerRow, size_t sourceBytesPerImage, Size sourceSize, std::shared_ptr<Texture> destination, size_t destinationSlice, size_t destinationLevel, Origin destinationOrigin, BlitOption options) {
 +void Indium::PrivateBlitCommandEncoder::copy(const std::shared_ptr<Buffer>& source, size_t sourceOffset, size_t sourceBytesPerRow, size_t sourceBytesPerImage, Size sourceSize, const std::shared_ptr<Texture>& destination, size_t destinationSlice, size_t destinationLevel, Origin destinationOrigin, BlitOption options) {
-+	_keepAlive.push_back(source);
-+	_keepAlive.push_back(destination);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(source);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(destination);
 +	noteDestination(destination);
  	auto cmdbuf = _privateCommandBuffer.lock();
 -	auto privateSource = std::dynamic_pointer_cast<PrivateBuffer>(source);
@@ -1868,7 +1869,7 @@ index e58f0ba..a89b8e4 100644
  
  	// first, transition the image to the optimal layout for transfer destinations
  	VkImageMemoryBarrier barrier {};
-@@ -71,9 +100,9 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, siz
+@@ -71,9 +101,9 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, siz
  
  	// now encode the copy
  	VkBufferImageCopy copyInfo {};
@@ -1881,14 +1882,14 @@ index e58f0ba..a89b8e4 100644
  	copyInfo.imageSubresource.aspectMask = aspect;
  	copyInfo.imageSubresource.mipLevel = destinationLevel;
  	copyInfo.imageSubresource.baseArrayLayer = destinationSlice;
-@@ -95,18 +124,19 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, siz
+@@ -95,18 +125,19 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Buffer> source, siz
  	DynamicVK::vkCmdPipelineBarrier(cmdbuf->commandBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
  };
  
 -void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, size_t sourceSlice, size_t sourceLevel, Origin sourceOrigin, Size sourceSize, std::shared_ptr<Buffer> destination, size_t destinationOffset, size_t destinationBytesPerRow, size_t destinationBytesPerImage, BlitOption options) {
 +void Indium::PrivateBlitCommandEncoder::copy(const std::shared_ptr<Texture>& source, size_t sourceSlice, size_t sourceLevel, Origin sourceOrigin, Size sourceSize, const std::shared_ptr<Buffer>& destination, size_t destinationOffset, size_t destinationBytesPerRow, size_t destinationBytesPerImage, BlitOption options) {
-+	_keepAlive.push_back(source);
-+	_keepAlive.push_back(destination);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(source);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(destination);
  	auto cmdbuf = _privateCommandBuffer.lock();
 -	auto privateSource = std::dynamic_pointer_cast<PrivateTexture>(source);
 -	auto privateDest = std::dynamic_pointer_cast<PrivateBuffer>(destination);
@@ -1906,7 +1907,7 @@ index e58f0ba..a89b8e4 100644
  
  	// first, transition the image to the optimal layout for transfer sources
  	VkImageMemoryBarrier barrier {};
-@@ -129,9 +159,9 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, si
+@@ -129,9 +160,9 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, si
  
  	// now encode the copy
  	VkBufferImageCopy copyInfo {};
@@ -1919,14 +1920,14 @@ index e58f0ba..a89b8e4 100644
  	copyInfo.imageSubresource.aspectMask = aspect;
  	copyInfo.imageSubresource.mipLevel = sourceLevel;
  	copyInfo.imageSubresource.baseArrayLayer = sourceSlice;
-@@ -153,10 +183,13 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, si
+@@ -153,10 +184,13 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, si
  	DynamicVK::vkCmdPipelineBarrier(cmdbuf->commandBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
  };
  
 -void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, size_t sourceSlice, size_t sourceLevel, Origin sourceOrigin, std::shared_ptr<Texture> destination, size_t destinationSlice, size_t destinationLevel, Origin destinationOrigin, size_t sliceCount, size_t levelCount, Size size) {
 +void Indium::PrivateBlitCommandEncoder::copy(const std::shared_ptr<Texture>& source, size_t sourceSlice, size_t sourceLevel, Origin sourceOrigin, const std::shared_ptr<Texture>& destination, size_t destinationSlice, size_t destinationLevel, Origin destinationOrigin, size_t sliceCount, size_t levelCount, Size size) {
-+	_keepAlive.push_back(source);
-+	_keepAlive.push_back(destination);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(source);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(destination);
 +	noteDestination(destination);
  	auto cmdbuf = _privateCommandBuffer.lock();
 -	auto privateSource = std::dynamic_pointer_cast<PrivateTexture>(source);
@@ -1936,7 +1937,7 @@ index e58f0ba..a89b8e4 100644
  
  	auto aspect = pixelFormatToVkImageAspectFlags(privateSource->pixelFormat());
  
-@@ -231,10 +264,10 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, si
+@@ -231,10 +265,10 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, si
  	DynamicVK::vkCmdPipelineBarrier(cmdbuf->commandBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, sizeof(barriers) / sizeof(*barriers), barriers);
  };
  
@@ -1950,7 +1951,7 @@ index e58f0ba..a89b8e4 100644
  	size_t sourceMipLevel = SIZE_MAX;
  	size_t destMipLevel = SIZE_MAX;
  
-@@ -282,18 +315,19 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, st
+@@ -282,18 +316,19 @@ void Indium::PrivateBlitCommandEncoder::copy(std::shared_ptr<Texture> source, st
  	copy(source, 0, sourceMipLevel, Origin { 0, 0, 0 }, destination, 0, destMipLevel, Origin { 0, 0, 0 }, sliceCount, mipCount, Size { source->width() / divisor, source->height() / divisor, source->depth() / divisor });
  };
  
@@ -1967,27 +1968,27 @@ index e58f0ba..a89b8e4 100644
  
 -void Indium::PrivateBlitCommandEncoder::fillBuffer(std::shared_ptr<Buffer> buffer, Range<size_t> range, uint8_t value) {
 +void Indium::PrivateBlitCommandEncoder::fillBuffer(const std::shared_ptr<Buffer>& buffer, Range<size_t> range, uint8_t value) {
-+	_keepAlive.push_back(buffer);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(buffer);
  	auto cmdbuf = _privateCommandBuffer.lock();
 -	auto privateBuffer = std::dynamic_pointer_cast<PrivateBuffer>(buffer);
 +	auto* privateBuffer = dynamic_cast<PrivateBuffer*>(buffer.get());
  	uint32_t value32 =
  		((uint32_t)value << 24) |
  		((uint32_t)value << 16) |
-@@ -314,8 +348,10 @@ void Indium::PrivateBlitCommandEncoder::fillBuffer(std::shared_ptr<Buffer> buffe
+@@ -314,8 +349,10 @@ void Indium::PrivateBlitCommandEncoder::fillBuffer(std::shared_ptr<Buffer> buffe
  	DynamicVK::vkCmdFillBuffer(cmdbuf->commandBuffer(), privateBuffer->buffer(), range.start, range.length, value32);
  };
  
 -void Indium::PrivateBlitCommandEncoder::generateMipmapsForTexture(std::shared_ptr<Texture> texture) {
 -	auto privateTexture = std::dynamic_pointer_cast<PrivateTexture>(texture);
 +void Indium::PrivateBlitCommandEncoder::generateMipmapsForTexture(const std::shared_ptr<Texture>& texture) {
-+	_keepAlive.push_back(texture);
++	if (!Indium::AB::off('b')) _keepAlive.push_back(texture);
 +	noteDestination(texture);
 +	auto* privateTexture = dynamic_cast<PrivateTexture*>(texture.get());
  	auto cmdbuf = _privateCommandBuffer.lock();
  
  	auto aspect = pixelFormatToVkImageAspectFlags(privateTexture->pixelFormat());
-@@ -439,5 +475,5 @@ void Indium::PrivateBlitCommandEncoder::generateMipmapsForTexture(std::shared_pt
+@@ -439,5 +476,5 @@ void Indium::PrivateBlitCommandEncoder::generateMipmapsForTexture(std::shared_pt
  };
  
  void Indium::PrivateBlitCommandEncoder::endEncoding() {
@@ -3183,10 +3184,11 @@ index 5f62ad0..a2906f3 100644
  	DynamicVK::vkCmdBindDescriptorSets(buf->commandBuffer(), VK_PIPELINE_BIND_POINT_COMPUTE, _pso->layout(), 0, descriptorSets.size(), descriptorSets.data(), 0, nullptr);
  };
 diff --git a/src/indium/device.cpp b/src/indium/device.cpp
-index 322e186..f5d41d7 100644
+index 322e186..8a0efaf 100644
 --- a/src/indium/device.cpp
 +++ b/src/indium/device.cpp
-@@ -1,4 +1,10 @@
+@@ -1,4 +1,11 @@
++#include <indium/ab-switch.private.hpp>
 +#include <chrono>
 +#include <cstdio>
 +#include <indium/completion-spin.private.hpp>
@@ -3197,7 +3199,7 @@ index 322e186..f5d41d7 100644
  #include <indium/instance.private.hpp>
  #include <indium/command-queue.private.hpp>
  #include <indium/render-pipeline.private.hpp>
-@@ -9,42 +15,217 @@
+@@ -9,42 +16,217 @@
  #include <indium/depth-stencil.private.hpp>
  #include <indium/compute-pipeline.private.hpp>
  #include <indium/dynamic-vk.hpp>
@@ -3421,7 +3423,7 @@ index 322e186..f5d41d7 100644
  			continue;
  		}
  
-@@ -67,12 +248,105 @@ void Indium::initGlobalDeviceList() {
+@@ -67,12 +249,105 @@ void Indium::initGlobalDeviceList() {
  		DynamicVK::vkGetPhysicalDeviceFeatures2(device, &features);
  
  		if (!features12.timelineSemaphore) {
@@ -3529,7 +3531,7 @@ index 322e186..f5d41d7 100644
  };
  
  void Indium::finitGlobalDeviceList() {
-@@ -83,8 +357,16 @@ Indium::Device::~Device() {};
+@@ -83,8 +358,16 @@ Indium::Device::~Device() {};
  
  Indium::PrivateDevice::PrivateDevice(VkPhysicalDevice physicalDevice):
  	_physicalDevice(physicalDevice)
@@ -3547,7 +3549,7 @@ index 322e186..f5d41d7 100644
  
  	std::vector<VkQueueFamilyProperties> queueFamilies;
  	uint32_t count = 0;
-@@ -233,6 +515,36 @@ Indium::PrivateDevice::PrivateDevice(VkPhysicalDevice physicalDevice):
+@@ -233,6 +516,36 @@ Indium::PrivateDevice::PrivateDevice(VkPhysicalDevice physicalDevice):
  		}
  	}
  
@@ -3584,7 +3586,7 @@ index 322e186..f5d41d7 100644
  	VkDeviceCreateInfo deviceCreateInfo {};
  	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
  	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-@@ -246,6 +558,7 @@ Indium::PrivateDevice::PrivateDevice(VkPhysicalDevice physicalDevice):
+@@ -246,6 +559,7 @@ Indium::PrivateDevice::PrivateDevice(VkPhysicalDevice physicalDevice):
  	}
  
  	_features = indiumFeatures;
@@ -3592,7 +3594,7 @@ index 322e186..f5d41d7 100644
  
  	for (const auto& index: queueFamilyIndices) {
  		VkQueue queue;
-@@ -294,9 +607,441 @@ Indium::PrivateDevice::PrivateDevice(VkPhysicalDevice physicalDevice):
+@@ -294,9 +608,441 @@ Indium::PrivateDevice::PrivateDevice(VkPhysicalDevice physicalDevice):
  			abort();
  		}
  	}
@@ -4034,7 +4036,7 @@ index 322e186..f5d41d7 100644
  	if (_oneshotCommandPool) {
  		DynamicVK::vkDestroyCommandPool(_device, _oneshotCommandPool, nullptr);
  	}
-@@ -308,6 +1053,23 @@ std::string Indium::PrivateDevice::name() const {
+@@ -308,6 +1054,23 @@ std::string Indium::PrivateDevice::name() const {
  	return _properties.deviceName;
  };
  
@@ -4058,7 +4060,7 @@ index 322e186..f5d41d7 100644
  std::shared_ptr<Indium::CommandQueue> Indium::PrivateDevice::newCommandQueue() {
  	return std::make_shared<PrivateCommandQueue>(shared_from_this());
  };
-@@ -317,9 +1079,9 @@ std::shared_ptr<Indium::RenderPipelineState> Indium::PrivateDevice::newRenderPip
+@@ -317,9 +1080,9 @@ std::shared_ptr<Indium::RenderPipelineState> Indium::PrivateDevice::newRenderPip
  };
  
  std::shared_ptr<Indium::ComputePipelineState> Indium::PrivateDevice::newComputePipelineState(const ComputePipelineDescriptor& descriptor, PipelineOption options, std::shared_ptr<ComputePipelineReflection> reflection) {
@@ -4071,7 +4073,7 @@ index 322e186..f5d41d7 100644
  	return std::make_shared<PrivateComputePipelineState>(shared_from_this(), descriptor);
  };
  
-@@ -336,10 +1098,57 @@ std::shared_ptr<Indium::Buffer> Indium::PrivateDevice::newBuffer(const void* poi
+@@ -336,10 +1099,57 @@ std::shared_ptr<Indium::Buffer> Indium::PrivateDevice::newBuffer(const void* poi
  };
  
  std::shared_ptr<Indium::Library> Indium::PrivateDevice::newLibrary(const void* data, size_t length) {
@@ -4133,7 +4135,7 @@ index 322e186..f5d41d7 100644
  	PrivateLibrary::FunctionInfoMap funcInfoMap;
  
  	for (const auto& [name, info]: outputInfo.functionInfos) {
-@@ -357,12 +1166,43 @@ std::shared_ptr<Indium::Library> Indium::PrivateDevice::newLibrary(const void* d
+@@ -357,12 +1167,43 @@ std::shared_ptr<Indium::Library> Indium::PrivateDevice::newLibrary(const void* d
  				break;
  		}
  
@@ -4179,7 +4181,7 @@ index 322e186..f5d41d7 100644
  	return lib;
  };
  
-@@ -382,6 +1222,19 @@ std::shared_ptr<Indium::Device> Indium::createSystemDefaultDevice() {
+@@ -382,6 +1223,19 @@ std::shared_ptr<Indium::Device> Indium::createSystemDefaultDevice() {
  	return globalDeviceList.empty() ? nullptr : globalDeviceList.front();
  };
  
@@ -4199,7 +4201,7 @@ index 322e186..f5d41d7 100644
  void Indium::PrivateDevice::pollEvents(uint64_t timeoutNanoseconds) {
  	// this is held for the entire duration of the poll so we can
  	// ensure we're the only one polling, which allows us to avoid
-@@ -393,9 +1246,35 @@ void Indium::PrivateDevice::pollEvents(uint64_t timeoutNanoseconds) {
+@@ -393,9 +1247,35 @@ void Indium::PrivateDevice::pollEvents(uint64_t timeoutNanoseconds) {
  	const std::vector<VkSemaphore> semaphores = _eventLoopSemaphores;
  	const std::vector<uint64_t> values = _eventLoopWaitValues;
  	const std::vector<std::function<void()>> callbacks = _eventLoopCallbacks;
@@ -4235,7 +4237,7 @@ index 322e186..f5d41d7 100644
  	VkSemaphoreWaitInfo info {};
  	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
  	info.semaphoreCount = semaphores.size();
-@@ -403,7 +1282,19 @@ void Indium::PrivateDevice::pollEvents(uint64_t timeoutNanoseconds) {
+@@ -403,7 +1283,19 @@ void Indium::PrivateDevice::pollEvents(uint64_t timeoutNanoseconds) {
  	info.pValues = values.data();
  	info.flags = VK_SEMAPHORE_WAIT_ANY_BIT;
  
@@ -4256,7 +4258,7 @@ index 322e186..f5d41d7 100644
  
  	if (result == VK_TIMEOUT) {
  		// timed out with no semaphores ready
-@@ -474,15 +1365,171 @@ void Indium::PrivateDevice::waitForSemaphore(VkSemaphore semaphore, uint64_t tar
+@@ -474,15 +1366,171 @@ void Indium::PrivateDevice::waitForSemaphore(VkSemaphore semaphore, uint64_t tar
  		_eventLoopSemaphores.push_back(semaphore);
  		_eventLoopWaitValues.push_back(targetValue);
  		_eventLoopCallbacks.push_back(callback);
@@ -4272,9 +4274,8 @@ index 322e186..f5d41d7 100644
 +    } else {
 +        noteWakeup("wakeupSkipped");
 +    }
- };
- 
--// TODO: create a semaphore pool to avoid constantly creating and destroying semaphores
++};
++
 +// Non-exported timeline handles are exclusively leased until the last owner
 +// (including GPU-completion callbacks) releases them. Preserve monotonic values.
 +
@@ -4293,8 +4294,9 @@ index 322e186..f5d41d7 100644
 +	VkSemaphore semaphore;
 +	uint64_t lastSignal;
 +	std::chrono::steady_clock::time_point since;
-+};
-+
+ };
+ 
+-// TODO: create a semaphore pool to avoid constantly creating and destroying semaphores
 +struct TimelineRetirement {
 +	std::mutex mutex;
 +	std::vector<RetiringTimelineSemaphore> waiting;
@@ -4431,7 +4433,7 @@ index 322e186..f5d41d7 100644
  	VkSemaphoreTypeCreateInfo typeInfo {};
  	typeInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
  	typeInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-@@ -505,7 +1552,16 @@ Indium::TimelineSemaphore Indium::PrivateDevice::getTimelineSemaphore() {
+@@ -505,7 +1553,21 @@ Indium::TimelineSemaphore Indium::PrivateDevice::getTimelineSemaphore() {
  };
  
  void Indium::PrivateDevice::putTimelineSemaphore(const TimelineSemaphore& semaphore) {
@@ -4444,12 +4446,17 @@ index 322e186..f5d41d7 100644
 +            return;
 +        }
 +    }
++    if (Indium::AB::off('t')) {
++        // INDIUM_AB=t (issue #299 diagnostic): the pre-#252 immediate destroy, which can fault on NVIDIA (Xid 31)
++        DynamicVK::vkDestroySemaphore(_device, semaphore.semaphore, nullptr);
++        return;
++    }
 +    // never vkDestroySemaphore() here directly: its last signal may still be pending (see retireTimelineSemaphore)
 +    retireTimelineSemaphore(_device, semaphore.semaphore, semaphore.count);
  };
  
  std::shared_ptr<Indium::TimelineSemaphore> Indium::PrivateDevice::getWrappedTimelineSemaphore() {
-@@ -541,8 +1597,249 @@ Indium::BinarySemaphore Indium::PrivateDevice::getBinarySemaphore(bool exportabl
+@@ -541,8 +1603,259 @@ Indium::BinarySemaphore Indium::PrivateDevice::getBinarySemaphore(bool exportabl
  	return BinarySemaphore { shared_from_this(), semaphore };
  };
  
@@ -4690,6 +4697,16 @@ index 322e186..f5d41d7 100644
 +
  void Indium::PrivateDevice::putBinarySemaphore(const BinarySemaphore& semaphore) {
 -	DynamicVK::vkDestroySemaphore(_device, semaphore.semaphore, nullptr);
++	if (Indium::AB::off('s')) {
++		// INDIUM_AB=s (issue #299 diagnostic): the pre-#252 immediate destroy, which can fault on NVIDIA (Xid 31)
++		{
++			auto& retirement = binaryRetirement();
++			std::lock_guard<std::mutex> lock(retirement.mutex);
++			retirement.unwaited.erase(semaphore.semaphore); // the handle value may be reused
++		}
++		DynamicVK::vkDestroySemaphore(_device, semaphore.semaphore, nullptr);
++		return;
++	}
 +	// never vkDestroySemaphore() here directly: its signal may still be pending (see BinaryRetirement)
 +	auto& retirement = binaryRetirement();
 +	std::lock_guard<std::mutex> lock(retirement.mutex);
@@ -4700,7 +4717,7 @@ index 322e186..f5d41d7 100644
  };
  
  std::shared_ptr<Indium::BinarySemaphore> Indium::PrivateDevice::getWrappedBinarySemaphore(bool exportable) {
-@@ -551,3 +1848,164 @@ std::shared_ptr<Indium::BinarySemaphore> Indium::PrivateDevice::getWrappedBinary
+@@ -551,3 +1864,164 @@ std::shared_ptr<Indium::BinarySemaphore> Indium::PrivateDevice::getWrappedBinary
  		delete ptr;
  	});
  };
@@ -5062,10 +5079,11 @@ index d56a213..d416ace 100644
 +
 +const std::vector<Iridium::ArgumentInfo>& Indium::PrivateFunction::argumentInfo() const { return _functionInfo.arguments; }
 diff --git a/src/indium/render-command-encoder.cpp b/src/indium/render-command-encoder.cpp
-index b27ffe5..4210d15 100644
+index b27ffe5..6017467 100644
 --- a/src/indium/render-command-encoder.cpp
 +++ b/src/indium/render-command-encoder.cpp
-@@ -1,3 +1,9 @@
+@@ -1,3 +1,10 @@
++#include <indium/ab-switch.private.hpp>
 +#include <atomic>
 +#include <indium/black-trace.private.hpp>
 +#include <indium/outline-chain.private.hpp>
@@ -5075,7 +5093,7 @@ index b27ffe5..4210d15 100644
  #include <indium/render-command-encoder.private.hpp>
  #include <indium/command-buffer.private.hpp>
  #include <indium/render-pass.hpp>
-@@ -12,35 +18,121 @@
+@@ -12,35 +19,121 @@
  #include <indium/depth-stencil.private.hpp>
  #include <indium/command-encoder.private.hpp>
  #include <indium/dynamic-vk.hpp>
@@ -5210,7 +5228,7 @@ index b27ffe5..4210d15 100644
  		auto clearColor = color.clearColor;
  		VkClearValue clearValue {};
  		clearValue.color.float32[0] = clearColor.red;
-@@ -65,36 +157,63 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
+@@ -65,36 +158,65 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
  	std::vector<VkSubpassDependency> dependencies;
  
  	for (const auto& color: descriptor.colorAttachments) {
@@ -5283,17 +5301,19 @@ index b27ffe5..4210d15 100644
 +    // depth-test stages and depth access belong here as well.
 +    VkSubpassDependency dependency {};
 +    dependency.srcSubpass = dependency.dstSubpass = 0;
++    // INDIUM_AB=d (issue #299) restores the colour-only dependency from before #213, to measure its cost.
++    const bool depthBarriers = !Indium::AB::off('d');
 +    dependency.srcStageMask = dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
++        (depthBarriers ? VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT : 0);
 +    dependency.srcAccessMask = dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
 +        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
++        (depthBarriers ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : 0);
 +    dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 +    dependencies.push_back(dependency);
  
  	std::vector<VkAttachmentReference> colorAttachments;
  	VkAttachmentReference depthStencilAttachment {};
-@@ -102,13 +221,15 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
+@@ -102,13 +224,15 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
  	size_t index = 0;
  	for (const auto& color: descriptor.colorAttachments) {
  		VkAttachmentReference ref {};
@@ -5313,7 +5333,7 @@ index b27ffe5..4210d15 100644
  		depthStencilAttachment.attachment = index;
  		depthStencilAttachment.layout = VK_IMAGE_LAYOUT_GENERAL;
  		++index;
-@@ -129,19 +250,19 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
+@@ -129,19 +253,19 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
  	renderPassInfo.dependencyCount = dependencies.size();
  	renderPassInfo.pDependencies = dependencies.data();
  
@@ -5339,7 +5359,7 @@ index b27ffe5..4210d15 100644
  	}
  
  	VkFramebufferCreateInfo framebufferInfo {};
-@@ -165,7 +286,51 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
+@@ -165,7 +289,51 @@ Indium::PrivateRenderCommandEncoder::PrivateRenderCommandEncoder(std::shared_ptr
  	renderPassBeginInfo.renderArea.extent.height = firstTexture->height();
  	renderPassBeginInfo.clearValueCount = clearValues.size();
  	renderPassBeginInfo.pClearValues = clearValues.data();
@@ -5392,7 +5412,7 @@ index b27ffe5..4210d15 100644
  
  	// set default values
  
-@@ -190,16 +355,26 @@ Indium::PrivateRenderCommandEncoder::~PrivateRenderCommandEncoder() {
+@@ -190,16 +358,26 @@ Indium::PrivateRenderCommandEncoder::~PrivateRenderCommandEncoder() {
  	if (_framebuffer) {
  		DynamicVK::vkDestroyFramebuffer(_privateDevice->device(), _framebuffer, nullptr);
  	}
@@ -5425,7 +5445,7 @@ index b27ffe5..4210d15 100644
  };
  
  void Indium::PrivateRenderCommandEncoder::setFrontFacingWinding(Winding frontFaceWinding) {
-@@ -225,6 +400,7 @@ void Indium::PrivateRenderCommandEncoder::setDepthClipMode(DepthClipMode depthCl
+@@ -225,6 +403,7 @@ void Indium::PrivateRenderCommandEncoder::setDepthClipMode(DepthClipMode depthCl
  	}
  };
  
@@ -5433,7 +5453,7 @@ index b27ffe5..4210d15 100644
  void Indium::PrivateRenderCommandEncoder::setViewport(const Viewport& viewport) {
  	setViewports(&viewport, 1);
  };
-@@ -239,7 +415,7 @@ void Indium::PrivateRenderCommandEncoder::setViewports(const Viewport* viewports
+@@ -239,7 +418,7 @@ void Indium::PrivateRenderCommandEncoder::setViewports(const Viewport* viewports
  		//       so we use a Vulkan 1.1 feature here and just flip the Y-axis of the viewport
  		//       (with a corresponding change in the origin).
  		vkViewport.x = viewport.originX;
@@ -5442,7 +5462,7 @@ index b27ffe5..4210d15 100644
  		vkViewport.width = viewport.width;
  		vkViewport.height = -viewport.height;
  		// the documentation for setViewport and setViewports states that znear and zfar must be between
-@@ -251,6 +427,7 @@ void Indium::PrivateRenderCommandEncoder::setViewports(const Viewport* viewports
+@@ -251,6 +430,7 @@ void Indium::PrivateRenderCommandEncoder::setViewports(const Viewport* viewports
  		vkViewport.maxDepth = std::clamp(viewport.zfar, 0., 1.);
  		tmp.push_back(vkViewport);
  	}
@@ -5450,7 +5470,7 @@ index b27ffe5..4210d15 100644
  	DynamicVK::vkCmdSetViewportWithCount(buf->commandBuffer(), tmp.size(), tmp.data());
  };
  
-@@ -274,6 +451,7 @@ void Indium::PrivateRenderCommandEncoder::setScissorRects(const ScissorRect* sci
+@@ -274,6 +454,7 @@ void Indium::PrivateRenderCommandEncoder::setScissorRects(const ScissorRect* sci
  		vkRect.extent.height = scissorRect.height;
  		tmp.push_back(vkRect);
  	}
@@ -5458,7 +5478,7 @@ index b27ffe5..4210d15 100644
  	DynamicVK::vkCmdSetScissorWithCount(buf->commandBuffer(), tmp.size(), tmp.data());
  };
  
-@@ -287,76 +465,359 @@ void Indium::PrivateRenderCommandEncoder::setBlendColor(float red, float green,
+@@ -287,76 +468,359 @@ void Indium::PrivateRenderCommandEncoder::setBlendColor(float red, float green,
  	DynamicVK::vkCmdSetBlendConstants(buf->commandBuffer(), tmp);
  };
  
@@ -5846,7 +5866,7 @@ index b27ffe5..4210d15 100644
  };
  
  void Indium::PrivateRenderCommandEncoder::drawPrimitives(PrimitiveType primitiveType, size_t vertexStart, size_t vertexCount, size_t instanceCount) {
-@@ -368,22 +829,45 @@ void Indium::PrivateRenderCommandEncoder::drawPrimitives(PrimitiveType primitive
+@@ -368,22 +832,45 @@ void Indium::PrivateRenderCommandEncoder::drawPrimitives(PrimitiveType primitive
  };
  
  void Indium::PrivateRenderCommandEncoder::setVertexBytes(const void* bytes, size_t length, size_t index) {
@@ -5895,7 +5915,7 @@ index b27ffe5..4210d15 100644
  	}
  };
  
-@@ -391,12 +875,14 @@ void Indium::PrivateRenderCommandEncoder::setVertexBufferOffset(size_t offset, s
+@@ -391,12 +878,14 @@ void Indium::PrivateRenderCommandEncoder::setVertexBufferOffset(size_t offset, s
  	_functionResources[0].setBufferOffset(offset, index);
  };
  
@@ -5912,7 +5932,7 @@ index b27ffe5..4210d15 100644
  };
  
  void Indium::PrivateRenderCommandEncoder::setVertexSamplerStates(const std::vector<std::shared_ptr<SamplerState>>& states, Range<size_t> range) {
-@@ -411,28 +897,34 @@ void Indium::PrivateRenderCommandEncoder::setVertexSamplerStates(const std::vect
+@@ -411,28 +900,34 @@ void Indium::PrivateRenderCommandEncoder::setVertexSamplerStates(const std::vect
  	}
  };
  
@@ -5951,7 +5971,7 @@ index b27ffe5..4210d15 100644
  	}
  };
  
-@@ -440,12 +932,14 @@ void Indium::PrivateRenderCommandEncoder::setFragmentBufferOffset(size_t offset,
+@@ -440,12 +935,14 @@ void Indium::PrivateRenderCommandEncoder::setFragmentBufferOffset(size_t offset,
  	_functionResources[1].setBufferOffset(offset, index);
  };
  
@@ -5968,7 +5988,7 @@ index b27ffe5..4210d15 100644
  };
  
  void Indium::PrivateRenderCommandEncoder::setFragmentSamplerStates(const std::vector<std::shared_ptr<SamplerState>>& states, Range<size_t> range) {
-@@ -460,69 +954,102 @@ void Indium::PrivateRenderCommandEncoder::setFragmentSamplerStates(const std::ve
+@@ -460,69 +957,102 @@ void Indium::PrivateRenderCommandEncoder::setFragmentSamplerStates(const std::ve
  	}
  };
  
@@ -6095,7 +6115,7 @@ index b27ffe5..4210d15 100644
  	DynamicVK::vkCmdSetDepthWriteEnable(buf->commandBuffer(), desc.depthWriteEnabled ? VK_TRUE : VK_FALSE);
  	DynamicVK::vkCmdSetDepthCompareOp(buf->commandBuffer(), compareFunctionToVkCompareOp(desc.depthCompareFunction));
  	DynamicVK::vkCmdSetDepthTestEnable(buf->commandBuffer(), VK_TRUE);
-@@ -694,3 +1221,25 @@ void Indium::PrivateRenderCommandEncoder::useResources(const std::vector<std::sh
+@@ -694,3 +1224,27 @@ void Indium::PrivateRenderCommandEncoder::useResources(const std::vector<std::sh
  	// TODO: check what Metal does in this case. this is just an educated guess
  	useResources(resources, usage, RenderStages::Vertex | RenderStages::Fragment | RenderStages::Tile | RenderStages::Object | RenderStages::Mesh);
  };
@@ -6111,14 +6131,16 @@ index b27ffe5..4210d15 100644
 +    // Howling Abyss) sample the depth that earlier draws in this pass wrote; without flushing depth writes the sampler
 +    // reads stale 8x8 depth tiles and the effect drops out in squares (issue #213).
 +    if (scope & 3) barrier.srcAccessMask |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
++    // INDIUM_AB=d (issue #299): colour only, as before #213, to match the pass self-dependency
++    const bool depthBarriers = !Indium::AB::off('d');
 +    if (scope & 4) barrier.srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
++        (depthBarriers ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : 0);
 +    barrier.dstAccessMask = barrier.srcAccessMask;
 +    // attachment writes are read back through textures
-+    if (scope & 4) barrier.dstAccessMask |= VK_ACCESS_SHADER_READ_BIT;
++    if (scope & 4) barrier.dstAccessMask |= depthBarriers ? VK_ACCESS_SHADER_READ_BIT : 0;
 +    VkPipelineStageFlags stages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 +    if (scope & 4) stages |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
++        (depthBarriers ? VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT : 0);
 +    DynamicVK::vkCmdPipelineBarrier(buf->commandBuffer(), stages, stages, VK_DEPENDENCY_BY_REGION_BIT, 1, &barrier, 0, nullptr, 0, nullptr);
 +}
 diff --git a/src/indium/render-pipeline.cpp b/src/indium/render-pipeline.cpp
@@ -11621,3 +11643,55 @@ index 6e2db34..cf2a98f 100644
  void* Iridium::translate(const void* inputData, size_t inputSize, size_t& outputSize, OutputInfo& outputInfo) {
  	AIR::Library lib(inputData, inputSize);
  	SPIRV::Builder builder;
+diff --git a/private-include/indium/ab-switch.private.hpp b/private-include/indium/ab-switch.private.hpp
+new file mode 100644
+index 0000000..f2a3218
+--- /dev/null
++++ b/private-include/indium/ab-switch.private.hpp
+@@ -0,0 +1,46 @@
++#pragma once
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++
++namespace Indium {
++namespace AB {
++// darling-lol issue #299: per-change switches to find which runtime change costs NVIDIA hosts their frame rate.
++// INDIUM_AB (environment) or the guest file /tmp/indium-ab holds letters; each one turns one change off for the
++// whole process. Read once; unset or empty keeps every change on.
++//   s  #252 binary semaphore retirement: destroy released binary semaphores at once, no retirement fence
++//   t  #252 timeline semaphore retirement: destroy a timeline semaphore the pool cannot keep at once
++//   b  #259 blit keep-alive: blit encoders do not hold their operands until the command buffer completes
++//   d  #213 depth in render-target barriers: barriers and the pass self-dependency cover colour only
++// s and t bring back the Xid 31 risk that #252 fixed. These are diagnostics, not settings.
++inline bool parse(const char* value, char letter) {
++	return value && std::strchr(value, letter) != nullptr;
++}
++
++inline const char* flags() {
++	static const char* value = [] {
++		static char buffer[32] = {};
++		const char* variable = std::getenv("INDIUM_AB");
++		if (variable && *variable) {
++			std::strncpy(buffer, variable, sizeof(buffer) - 1);
++		} else if (FILE* file = std::fopen("/tmp/indium-ab", "r")) {
++			size_t read = std::fread(buffer, 1, sizeof(buffer) - 1, file);
++			buffer[read] = '\0';
++			std::fclose(file);
++		}
++		if (buffer[0]) {
++			if (FILE* log = std::fopen("/tmp/indium-ab.log", "a")) {
++				std::fprintf(log, "indium-ab: %s\n", buffer);
++				std::fclose(log);
++			}
++		}
++		return buffer;
++	}();
++	return value;
++}
++
++inline bool off(char letter) {
++	return parse(flags(), letter);
++}
++}
++}
