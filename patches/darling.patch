@@ -4316,10 +4316,10 @@ index 299caa5b1..bdff6028c 100644
  
  __END_DECLS
 diff --git a/src/frameworks/CoreVideo/src/CVDisplayLink.mm b/src/frameworks/CoreVideo/src/CVDisplayLink.mm
-index 3e9cba226..a50629bad 100644
+index 3e9cba22..4d6a8049 100644
 --- a/src/frameworks/CoreVideo/src/CVDisplayLink.mm
 +++ b/src/frameworks/CoreVideo/src/CVDisplayLink.mm
-@@ -1,38 +1,941 @@
+@@ -1,38 +1,964 @@
  #include <CoreVideo/CVDisplayLink.h>
 +#include <stdint.h>
 +#include <string.h>
@@ -5126,6 +5126,46 @@ index 3e9cba226..a50629bad 100644
 +static const char* displayLinkTick =
 +    "displayLinkTick"; /* marker so grep can find the tick body */
 +
++struct DisplayLinkClock {
++    int32_t rate;
++    uint64_t periodNS;
++    uint64_t periodMach;
++    struct mach_timebase_info timebase;
++
++    CVTimeStamp currentTime() const {
++        CVTimeStamp stamp = {};
++        stamp.hostTime = mach_absolute_time();
++        uint64_t ns = stamp.hostTime;
++        if (timebase.numer != timebase.denom) {
++            // Convert elapsed time before dividing by the display period.
++            // Rounding the period to whole Mach ticks first accumulates drift.
++            ns = (ns / timebase.denom) * timebase.numer +
++                 (ns % timebase.denom) * timebase.numer / timebase.denom;
++        }
++        stamp.videoTime = ns / periodNS;
++        stamp.videoTimeScale = rate;
++        stamp.videoRefreshPeriod = 1;
++        stamp.flags = kCVTimeStampHostTimeValid | kCVTimeStampVideoTimeValid |
++                      kCVTimeStampVideoRefreshPeriodValid;
++        return stamp;
++    }
++};
++
++static const DisplayLinkClock& displayLinkClock() {
++    static const DisplayLinkClock clock = [] {
++        const char* hz = getenv("RCLOL_REFRESH_HZ");
++        long rate = hz ? strtol(hz, nullptr, 10) : 0;
++        DisplayLinkClock value = {};
++        value.rate = rate > 0 && rate <= 1000 ? (int32_t)rate : 60;
++        value.periodNS = 1000000000ull / value.rate;
++        mach_timebase_info(&value.timebase);
++        value.periodMach = (value.periodNS * value.timebase.denom + value.timebase.numer - 1) /
++                           value.timebase.numer;
++        return value;
++    }();
++    return clock;
++}
++
 +static void displayLinkTickFromRec(CVLinkStateRec* rec) {
 +	CVDisplayLinkOutputCallback callback = (CVDisplayLinkOutputCallback) rec->callback;
 +	if (traceLog != NULL) {
@@ -5135,23 +5175,11 @@ index 3e9cba226..a50629bad 100644
 +	}
 +	if (callback != NULL && rec->running && rec->refs) {
 +		rec->ticks++;
-+		struct mach_timebase_info timebase;
-+		mach_timebase_info(&timebase);
-+		uint64_t periodNs = 1000000000ull / 60ull;
-+		uint64_t periodMach = periodNs * timebase.denom / timebase.numer;
-+
-+		uint64_t hostTime = mach_absolute_time();
-+		CVTimeStamp now = {};
-+		now.version = 0;
-+		now.hostTime = hostTime;
-+		now.videoTime = hostTime / periodMach;
-+		now.videoTimeScale = 60;
-+		now.videoRefreshPeriod = 1;
-+		now.flags = kCVTimeStampHostTimeValid | kCVTimeStampVideoTimeValid |
-+		    kCVTimeStampVideoRefreshPeriodValid;
++		const auto& clock = displayLinkClock();
++		CVTimeStamp now = clock.currentTime();
 +		CVTimeStamp outputTime = now;
-+		outputTime.hostTime = hostTime + periodMach;
-+        outputTime.videoTime = now.videoTime + 1;
++		outputTime.hostTime += clock.periodMach;
++		outputTime.videoTime = now.videoTime + 1;
 +		CVOptionFlags flagsOut = 0;
 +		callback(rec->link, &now, &outputTime, 0, &flagsOut, rec->userInfo);
 +	} else {
@@ -5187,12 +5215,7 @@ index 3e9cba226..a50629bad 100644
 +static void *displayClockThread(void *) {
 +    struct { long sec, nsec; } deadline;
 +    if (__lolsys_syscall(1,(long)&deadline,0,0,0,0,228)<0) return NULL;
-+    static uint64_t cvIntervalNS = 0;
-+    if (!cvIntervalNS) {
-+        const char *hz = getenv("RCLOL_REFRESH_HZ");
-+        int rate = hz ? atoi(hz) : 0;
-+        cvIntervalNS = (rate > 0 && rate <= 1000) ? 1000000000ull / (uint64_t)rate : (1000000000ull / 60ull);
-+    }
++    const uint64_t cvIntervalNS = displayLinkClock().periodNS;
 +    for (;;) {
 +        deadline.nsec += cvIntervalNS;
 +        if(deadline.nsec>=NSEC_PER_SEC){deadline.nsec-=NSEC_PER_SEC;++deadline.sec;}
@@ -5269,7 +5292,7 @@ index 3e9cba226..a50629bad 100644
  	*displayLinkOut = (CVDisplayLinkRef) self;
  	return kCVReturnSuccess;
  }
-@@ -41,35 +944,102 @@ CVReturn CVDisplayLinkStart(CVDisplayLinkRef displayLink)
+@@ -41,35 +967,102 @@ CVReturn CVDisplayLinkStart(CVDisplayLinkRef displayLink)
  {
  	if (!displayLink)
  		return kCVReturnInvalidArgument;
@@ -5383,7 +5406,7 @@ index 3e9cba226..a50629bad 100644
  	return kCVReturnSuccess;
  }
  
-@@ -91,7 +1061,7 @@ CVReturn CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(CVDisplayLinkRef disp
+@@ -91,7 +1084,7 @@ CVReturn CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(CVDisplayLinkRef disp
  			CGDirectDisplayID displayID = [window.screen cgDirectDisplayID];
  			NSMutableDictionary* self = (NSMutableDictionary*) displayLink;
  
@@ -5392,7 +5415,7 @@ index 3e9cba226..a50629bad 100644
  					forKey: kDirectDisplayArray];
  			return kCVReturnSuccess;
  		}
-@@ -117,14 +1087,34 @@ CVReturn CVDisplayLinkCreateWithCGDisplay(
+@@ -117,14 +1110,34 @@ CVReturn CVDisplayLinkCreateWithCGDisplay(
      CGDirectDisplayID displayID,
      CV_RETURNS_RETAINED_PARAMETER CVDisplayLinkRef CV_NULLABLE * CV_NONNULL displayLinkOut )
  {
@@ -5430,29 +5453,20 @@ index 3e9cba226..a50629bad 100644
  	return kCVReturnSuccess;
  }
  
-@@ -150,3 +1140,24 @@ CVTime CVDisplayLinkGetNominalOutputVideoRefreshPeriod( CVDisplayLinkRef CV_NONN
+@@ -150,3 +1163,15 @@ CVTime CVDisplayLinkGetNominalOutputVideoRefreshPeriod( CVDisplayLinkRef CV_NONN
  	CGDisplayModeRelease(mode);
  	return time;
  }
 +
 +// darling-lol: linked by the current Riot Client. Report the current host time
-+// on the same 60 Hz video timeline the output callback uses.
++// on the same video timeline the output callback uses.
 +CVReturn CVDisplayLinkGetCurrentTime(CVDisplayLinkRef displayLink, CVTimeStamp* outTime)
 +{
 +	if (displayLink == NULL || outTime == NULL)
 +		return kCVReturnInvalidArgument;
-+	struct mach_timebase_info timebase;
-+	mach_timebase_info(&timebase);
-+	uint64_t periodMach = (1000000000ull / 60ull) * timebase.denom / timebase.numer;
-+	uint64_t hostTime = mach_absolute_time();
-+	memset(outTime, 0, sizeof(*outTime));
-+	outTime->hostTime = hostTime;
-+	outTime->videoTime = hostTime / periodMach;
-+	outTime->videoTimeScale = 60;
-+	outTime->videoRefreshPeriod = 1;
++	*outTime = displayLinkClock().currentTime();
 +	outTime->rateScalar = 1.0;
-+	outTime->flags = kCVTimeStampHostTimeValid | kCVTimeStampVideoTimeValid |
-+	    kCVTimeStampVideoRefreshPeriodValid | kCVTimeStampRateScalarValid;
++	outTime->flags |= kCVTimeStampRateScalarValid;
 +	return kCVReturnSuccess;
 +}
 diff --git a/src/frameworks/CoreVideo/src/constants.c b/src/frameworks/CoreVideo/src/constants.c
